@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Consultamos la API de Steam pidiendo los precios para Argentina (AR)
+    // La consulta a la API de Steam no cambia
     const response = await fetch(
       `https://store.steampowered.com/api/appdetails?appids=${appId}&cc=AR&l=spanish`
     );
@@ -19,15 +19,18 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await response.json();
-
-    // La respuesta de Steam es un poco compleja, navegamos hasta el precio
     const appData = data[appId];
 
     if (appData.success && appData.data?.price_overview) {
       const priceData = appData.data.price_overview;
-      // El precio viene en centavos, lo dividimos por 100 para obtener el valor real.
-      const priceInArs = priceData.final / 100;
-      return NextResponse.json({ price: priceInArs });
+      
+      // Obtenemos el precio y la moneda
+      const priceValue = priceData.final / 100;
+      const currency = priceData.currency; // Ej: "USD"
+
+      // --- CAMBIO CLAVE: Devolvemos un objeto con precio y moneda ---
+      return NextResponse.json({ price: priceValue, currency: currency });
+
     } else {
       // Esto puede pasar si el juego es gratuito o no tiene precio definido
       return NextResponse.json({ error: 'Price not found for this app ID.' }, { status: 404 });

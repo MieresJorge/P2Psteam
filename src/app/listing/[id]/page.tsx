@@ -12,12 +12,17 @@ interface Profile {
   avatar_url: string;
 }
 
+// Ya no necesitamos una interfaz compleja para el comprador aquí
+interface BuyerProfile {
+  id: string;
+  balance_ars: number;
+}
+
 export default async function ListingDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
   
   const { data: { user: buyer } } = await supabase.auth.getUser();
 
-  // Buscamos la publicación con los nuevos campos en USD
   const { data: listing, error: listingError } = await supabase
     .from('listings')
     .select('*')
@@ -28,15 +33,28 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
     notFound();
   }
 
-  const { data: profile } = await supabase
+  // Obtener perfil del vendedor (sin cambios)
+  const { data: sellerProfile } = await supabase
     .rpc('get_user_profiles_by_ids', { user_ids: [listing.seller_id] })
     .returns<Profile[]>()
     .single();
 
-  const sellerName = profile?.name || 'Usuario Desconocido';
-  const sellerAvatar = profile?.avatar_url || '/default-avatar.png';
+  // --- OBTENER SALDO DEL COMPRADOR (VERSIÓN CORREGIDA) ---
+  let buyerProfile: BuyerProfile | null = null;
+  if (buyer) {
+    // La consulta ahora es más simple y correcta
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, balance_ars')
+      .eq('id', buyer.id)
+      .single();
+    buyerProfile = data;
+  }
+  // --- FIN DE LA CORRECCIÓN ---
 
-  // Calculamos el saldo disponible en USD
+  const sellerName = sellerProfile?.name || 'Usuario Desconocido';
+  const sellerAvatar = sellerProfile?.avatar_url || '/default-avatar.png';
+
   const reservedUsd = listing.reserved_amount_ars / listing.sell_price_per_usd;
   const availableUsd = listing.usd_amount - reservedUsd;
 
@@ -67,7 +85,7 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
                 <p className="text-3xl font-bold text-green-400">{listing.sell_price_per_usd.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</p>
               </div>
               <div className="bg-gray-700 p-4 rounded-md">
-                <p className="text-sm text-gray-400">Saldo Disponible</p>
+                <p className="text-sm text-gray-400">Saldo Disponible del Vendedor</p>
                 <p className="text-3xl font-bold">${availableUsd.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} USD</p>
               </div>
             </div>
@@ -76,7 +94,12 @@ export default async function ListingDetailPage({ params }: { params: { id: stri
             
             <div>
               {buyer && buyer.id !== listing.seller_id && (
-                <PurchaseForm listing={listing} buyer={buyer} availableAmountUsd={availableUsd} />
+                <PurchaseForm 
+                  listing={listing} 
+                  buyer={buyer} 
+                  buyerBalance={buyerProfile?.balance_ars ?? 0} // Ahora buyerProfile tiene el dato correcto
+                  availableAmountUsd={availableUsd} 
+                />
               )}
               {buyer && buyer.id === listing.seller_id && (
                 <div className="bg-gray-700 p-6 rounded-md text-center"><p className="text-gray-300">Estás viendo tu propia publicación.</p></div>

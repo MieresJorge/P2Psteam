@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import DashboardHeader from "./components/DashboardHeader";
 import ListingsDisplay from "./components/ListingsDisplay";
-import MySales from "./components/MySales";
+// import MySales from "./components/MySales"; // Ya no lo necesitamos aquí
 import StatCard from "./components/StatCard";
 import { DollarSign, ShoppingCart, PackageCheck } from "lucide-react";
 import SteamConnectButton from "./components/SteamConnectButton";
@@ -36,23 +36,21 @@ export default async function DashboardPage() {
     );
   }
 
-  // --- Lógica para notificaciones y estadísticas ---
+  // La lógica para obtener los datos no cambia
   const { data: pendingReviewsData } = await supabase.from('transactions').select('reviews(id)').eq('buyer_id', user.id).eq('status', 'completed');
   const hasPendingReviews = pendingReviewsData ? pendingReviewsData.some(tx => !tx.reviews || tx.reviews.length === 0) : false;
   const { data: salesData } = await supabase.from('transactions').select('id, status').eq('seller_id', user.id);
   const { data: purchasesData } = await supabase.from('transactions').select('id, status').eq('buyer_id', user.id);
-  const pendingSalesCount = salesData?.filter(s => s.status === 'pending_delivery').length || 0;
+  const activeSalesCount = salesData?.filter(s => s.status !== 'completed' && s.status !== 'cancelled').length || 0;
   const activePurchasesCount = purchasesData?.filter(p => p.status !== 'completed' && p.status !== 'cancelled').length || 0;
   
-  // --- NUEVA LÓGICA: OBTENER SALDO DISPONIBLE DEL PERFIL ---
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('available_balance_ars')
+    .select('balance_ars')
     .eq('id', user.id)
     .single();
-  const availableBalance = profileData?.available_balance_ars || 0;
+  const availableBalance = profileData?.balance_ars || 0;
   
-  // --- Lógica para obtener el perfil de Steam (se queda igual) ---
   let steamProfile: SteamPlayer | null = null;
   try {
     const apiKey = process.env.STEAM_API_KEY;
@@ -75,16 +73,19 @@ export default async function DashboardPage() {
     <main className="min-h-screen bg-gray-900 text-white p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-8">
         <DashboardHeader steamProfile={steamProfile} hasPendingReviews={hasPendingReviews} />
+        
         <div className="grid gap-4 md:grid-cols-3">
-          <StatCard title="Ventas Pendientes de Entrega" value={pendingSalesCount} icon={PackageCheck} href="/dashboard/sales" />
+          <StatCard title="Ventas Activas" value={activeSalesCount} icon={PackageCheck} href="/dashboard/sales" />
           <StatCard title="Compras Activas" value={activePurchasesCount} icon={ShoppingCart} href="/dashboard/purchases" />
-          {/* AHORA MOSTRAMOS EL SALDO REAL DE LA BILLETERA */}
           <StatCard 
-            title="Saldo disponible a Retirar" 
+            title="Créditos Disponibles (ARS)" 
             value={availableBalance.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })} 
             icon={DollarSign} 
           />
         </div>
+        
+        {/* <MySales /> -- LÍNEA ELIMINADA */}
+
         <div className="grid grid-cols-1">
           <div>
             <h2 className="text-3xl font-bold mb-6">Mercado de Saldos</h2>

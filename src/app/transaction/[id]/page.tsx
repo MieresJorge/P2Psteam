@@ -20,7 +20,6 @@ export default async function TransactionDetailPage({ params }: { params: { id: 
     redirect('/auth-ui');
   }
 
-  // 1. Buscamos la transacción.
   const { data: transaction, error: txError } = await supabase
     .from('transactions')
     .select('*, listing:listing_id(sell_price_per_usd)')
@@ -38,7 +37,6 @@ export default async function TransactionDetailPage({ params }: { params: { id: 
       notFound();
   }
   
-  // 2. Buscamos los perfiles del comprador y vendedor con el método seguro.
   const { data: profilesData, error: profilesError } = await supabase
     .rpc('get_user_profiles_by_ids', { user_ids: [transaction.buyer_id, transaction.seller_id] });
   
@@ -53,7 +51,6 @@ export default async function TransactionDetailPage({ params }: { params: { id: 
       sellerProfile = profiles.find(p => p.id === transaction.seller_id);
   }
 
-  // 3. Buscamos por separado el código de amigo del vendedor desde la tabla 'profiles'
   const { data: sellerExtraProfile } = await supabase
     .from('profiles')
     .select('steam_friend_code')
@@ -62,7 +59,6 @@ export default async function TransactionDetailPage({ params }: { params: { id: 
 
   const sellerFriendCode = sellerExtraProfile?.steam_friend_code;
   
-  // 4. Definimos los pasos del proceso
   const steps = [
     { status: 'pending_payment', label: 'Pago del Comprador', icon: <Hourglass size={20}/> },
     { status: 'pending_friend_request', label: 'Envío de Solicitud de Amistad', icon: <Handshake size={20}/> },
@@ -74,6 +70,10 @@ export default async function TransactionDetailPage({ params }: { params: { id: 
 
   const currentStepIndex = steps.findIndex(step => step.status === transaction.status);
   
+  const actionIsOnCurrentUser = 
+    (isBuyer && ['pending_payment', 'pending_friend_request', 'pending_confirmation'].includes(transaction.status)) ||
+    (isSeller && ['pending_friend_acceptance', 'pending_delivery'].includes(transaction.status));
+
   return (
     <main className="min-h-screen bg-gray-900 text-white p-4 md:p-8">
       <div className="max-w-2xl mx-auto">
@@ -103,13 +103,26 @@ export default async function TransactionDetailPage({ params }: { params: { id: 
                     <h3 className={`font-bold text-lg ${isCurrent ? 'text-sky-400' : 'text-white'}`}>{step.label}</h3>
                     <div className="text-sm text-gray-300">
                       {isCurrent && (
-                        <div className="p-4 mt-2 bg-gray-700/50 rounded-md border border-gray-700">
-                          <p className="font-semibold mb-2 text-yellow-400">ACCIÓN REQUERIDA:</p>
+                        <div className={`p-4 mt-2 rounded-md border ${
+                            transaction.status === 'completed' 
+                              ? 'border-transparent'
+                              : 'bg-gray-700/50 border-gray-700'
+                          }`}>
+                          
+                          {transaction.status !== 'completed' && (
+                            actionIsOnCurrentUser ? (
+                              <p className="font-semibold mb-2 text-yellow-400">ACCIÓN REQUERIDA:</p>
+                            ) : (
+                              <p className="font-semibold mb-2 text-sky-400">ESPERANDO A LA OTRA PARTE:</p>
+                            )
+                          )}
+                          
                            <ActionButtons 
                              transaction={transaction}
                              isBuyer={isBuyer}
                              isSeller={isSeller}
                              sellerFriendCode={sellerFriendCode}
+                             buyerProfile={buyerProfile}
                            />
                         </div>
                       )}

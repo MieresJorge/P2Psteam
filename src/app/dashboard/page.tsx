@@ -80,7 +80,7 @@ export default async function DashboardPage() {
           <StatCard title="Compras Activas" value={activePurchasesCount} icon={ShoppingCart} href="/dashboard/purchases" />
           {/* AHORA MOSTRAMOS EL SALDO REAL DE LA BILLETERA */}
           <StatCard 
-            title="Saldo a Retirar" 
+            title="Saldo disponible a Retirar" 
             value={availableBalance.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })} 
             icon={DollarSign} 
           />

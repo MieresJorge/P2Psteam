@@ -2,6 +2,7 @@
 'use client';
 
 import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/client"; // 1. Importar el cliente de Supabase
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -11,7 +12,6 @@ export default function ConfirmDeliveryButtons({ transactionId }: { transactionI
   const [loading, setLoading] = useState(false);
   const [isDisputeLoading, setIsDisputeLoading] = useState(false);
 
-  // --- FUNCIÓN handleConfirm CORREGIDA ---
   const handleConfirm = async () => {
     if (!confirm("Al confirmar, los fondos se liberarán al vendedor. ¿Estás seguro de que recibiste el producto correctamente? Esta acción no se puede deshacer.")) {
       return;
@@ -19,7 +19,7 @@ export default function ConfirmDeliveryButtons({ transactionId }: { transactionI
     setLoading(true);
 
     try {
-      // Ahora llamamos a nuestra API de backend para que haga todo el trabajo.
+      // Llamamos a nuestra API para que procese el pago al vendedor
       const response = await fetch('/api/payouts/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -31,6 +31,16 @@ export default function ConfirmDeliveryButtons({ transactionId }: { transactionI
       if (!response.ok) {
         throw new Error(result.error || 'Ocurrió un error en el servidor.');
       }
+
+      // --- CAMBIO CLAVE: Enviamos el aviso por Broadcast al confirmar ---
+      const supabase = createClient();
+      const channel = supabase.channel(`transaction-updates-${transactionId}`);
+      await channel.send({
+        type: 'broadcast',
+        event: 'status-updated',
+        payload: { newStatus: 'completed' },
+      });
+      // -------------------------------------------------------------
 
       toast.success("¡Transacción completada!", { description: "El pago ha sido acreditado al vendedor." });
       router.refresh();
@@ -47,11 +57,9 @@ export default function ConfirmDeliveryButtons({ transactionId }: { transactionI
       return;
     }
     setIsDisputeLoading(true);
-    // Lógica para la disputa
-    // ...
+    // Aquí iría la lógica para la disputa
     toast.info("Disputa iniciada. El equipo de soporte se pondrá en contacto contigo pronto.");
     setIsDisputeLoading(false);
-    router.refresh();
   };
 
   return (

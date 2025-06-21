@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { toast } from "sonner"; // Usaremos toasts para notificaciones
 
 export default function MarkAsSentButton({ transactionId }: { transactionId: number }) {
   const router = useRouter();
@@ -18,19 +19,29 @@ export default function MarkAsSentButton({ transactionId }: { transactionId: num
     setLoading(true);
     const supabase = createClient();
 
+    // Actualizamos el estado de la transacción a 'pending_confirmation'
     const { error } = await supabase
       .from('transactions')
       .update({ status: 'pending_confirmation' })
       .eq('id', transactionId);
 
-    setLoading(false);
-
     if (error) {
-      alert("Error al actualizar el estado: " + error.message);
+      toast.error("Error al actualizar el estado", { description: error.message });
     } else {
-      alert("¡Venta marcada como enviada! Esperando la confirmación del comprador.");
-      router.refresh(); // Refrescamos la página para que la venta desaparezca de esta lista.
+      // --- CAMBIO CLAVE: Enviamos el aviso por Broadcast ---
+      const channel = supabase.channel(`transaction-updates-${transactionId}`);
+      await channel.send({
+        type: 'broadcast',
+        event: 'status-updated',
+        payload: { newStatus: 'pending_confirmation' },
+      });
+      // ---------------------------------------------------
+      
+      toast.success("¡Venta marcada como enviada!", { description: "Esperando la confirmación del comprador." });
+      router.refresh(); // Refrescamos la vista del usuario actual
     }
+
+    setLoading(false);
   };
 
   return (

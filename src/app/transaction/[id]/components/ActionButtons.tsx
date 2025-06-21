@@ -8,9 +8,9 @@ import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import Link from "next/link"; // 1. Importar Link
+import Link from "next/link";
 
-// Definimos la interfaz para los perfiles
+// Interfaces (sin cambios)
 interface Profile {
   id: string;
   name: string;
@@ -32,10 +32,12 @@ interface Props {
 export default function ActionButtons({ transaction, isBuyer, isSeller, sellerFriendCode, buyerProfile }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const supabase = createClient(); // Creamos el cliente una sola vez
 
   const updateStatus = async (newStatus: string) => {
     setLoading(true);
-    const supabase = createClient();
+
+    // 1. Actualizamos el estado en la base de datos
     const { error } = await supabase
       .from('transactions')
       .update({ status: newStatus })
@@ -43,14 +45,25 @@ export default function ActionButtons({ transaction, isBuyer, isSeller, sellerFr
     
     if (error) {
       alert("Error al actualizar la transacción: " + error.message);
-    } else {
-      router.refresh();
+      setLoading(false);
+      return;
     }
+
+    // 2. --- CAMBIO CLAVE: ENVIAMOS EL AVISO POR BROADCAST ---
+    const channel = supabase.channel(`transaction-updates-${transaction.id}`);
+    channel.send({
+      type: 'broadcast',
+      event: 'status-updated',
+      payload: { newStatus: newStatus },
+    });
+    // --------------------------------------------------------
+
+    router.refresh(); // Refrescamos la vista del usuario actual
     setLoading(false);
   };
 
+  // El switch se mantiene igual
   switch (transaction.status) {
-    // (Casos anteriores sin cambios)
     case 'pending_payment':
       if (isBuyer) return <PayButton transactionId={transaction.id} />;
       return <p className="text-gray-400 italic">Esperando pago del comprador...</p>;
@@ -94,7 +107,6 @@ export default function ActionButtons({ transaction, isBuyer, isSeller, sellerFr
       if (isBuyer) return <ConfirmDeliveryButtons transactionId={transaction.id} />;
       return <p className="text-gray-400 italic">Esperando que el comprador confirme la recepción del regalo...</p>;
     
-    // 2. AÑADIMOS EL NUEVO CASO PARA 'COMPLETED'
     case 'completed':
       return (
         <div className="text-center space-y-2">
